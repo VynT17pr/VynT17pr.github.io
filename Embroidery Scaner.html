@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Розпізнавання вишивки</title>
+  <style>
+    video, canvas {
+      width: 100%;
+      max-width: 400px;
+      display: block;
+      margin: 10px auto;
+      border: 1px solid #ccc;
+    }
+    button, input {
+      font-size: 1em;
+      display: block;
+      margin: 10px auto;
+    }
+    pre {
+      text-align: center;
+      font-size: 1.2em;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+
+<h2 style="text-align:center;">🧵 Сканер вишивки</h2>
+
+<video id="video" autoplay playsinline></video>
+
+<button id="captureBtn">📸 Зробити фото</button>
+
+<p style="text-align:center;">
+  Введіть розмір схеми: 
+  <input type="number" id="gridX" value="40" min="10" max="100"> x 
+  <input type="number" id="gridY" value="40" min="10" max="100">
+</p>
+
+<canvas id="canvas" style="display:none;"></canvas>
+
+<pre id="binaryMatrix">Очікується зображення…</pre>
+
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+async function initCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' },
+      audio: false
+    });
+    video.srcObject = stream;
+  } catch (error) {
+    alert("Доступ до камери заборонено: " + error.message);
+  }
+}
+
+function getAverageColor(x, y, width, height) {
+  const block = ctx.getImageData(x, y, width, height).data;
+  let r = 0, g = 0, b = 0;
+  for (let i = 0; i < block.length; i += 4) {
+    r += block[i];
+    g += block[i + 1];
+    b += block[i + 2];
+  }
+  const pixelCount = block.length / 4;
+  return [
+    r / pixelCount,
+    g / pixelCount,
+    b / pixelCount
+  ];
+}
+
+document.getElementById('captureBtn').addEventListener('click', () => {
+  const gridX = parseInt(document.getElementById('gridX').value);
+  const gridY = parseInt(document.getElementById('gridY').value);
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const cellW = canvas.width / gridX;
+  const cellH = canvas.height / gridY;
+
+  let binaryString = '';
+  let binaryMatrix = '';
+
+  for (let y = 0; y < gridY; y++) {
+    for (let x = 0; x < gridX; x++) {
+      const startX = Math.floor(x * cellW + cellW / 4);
+      const startY = Math.floor(y * cellH + cellH / 4);
+      const blockW = Math.floor(cellW / 2);
+      const blockH = Math.floor(cellH / 2);
+
+      const [r, g, b] = getAverageColor(startX, startY, blockW, blockH);
+
+      const isYellow = r > 200 && g > 200 && b < 130;
+      const isBlue = b > 150 && r < 100 && g < 100;
+
+      if (isYellow) {
+        binaryString += '1';
+        binaryMatrix += '🟡';
+      } else if (isBlue) {
+        binaryString += '0';
+        binaryMatrix += '🔵';
+      } else {
+        binaryMatrix += '⬜';
+      }
+    }
+    binaryMatrix += '\n';
+  }
+
+  // Конвертація
+  let decoded = '';
+  for (let i = 0; i < binaryString.length; i += 8) {
+    const byte = binaryString.slice(i, i + 8);
+    if (byte.length === 8) {
+      decoded += String.fromCharCode(parseInt(byte, 2));
+    }
+  }
+
+  document.getElementById('binaryMatrix').textContent =
+    `📘 Розшифрована матриця:\n${binaryMatrix}\n\n🔓 Результат: ${decoded || 'немає результату'}`;
+});
+
+initCamera();
+</script>
+</body>
+</html>
